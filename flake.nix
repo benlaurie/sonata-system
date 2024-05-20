@@ -48,28 +48,46 @@
           cp -r build/lowrisc_sonata_system_0/sim-verilator/Vtop_verilator $out/bin/
         '';
       };
+
+      sonata-deps =
+        (with pkgs; [
+          cmake
+          screen
+          picocom
+          srecord
+          gtkwave
+          openfpgaloader
+          openocd
+        ])
+        ++ (with lr_pkgs; [
+          uf2conv
+          # For legacy software
+          lowrisc-toolchain-gcc-rv32imcb
+        ])
+        ++ (with sonata-simulator; buildInputs ++ nativeBuildInputs);
+
     in {
       formatter = pkgs.alejandra;
       devShells.default = pkgs.mkShell {
         name = "sonata-system-devshell";
-        packages =
-          (with pkgs; [
-            cmake
-            screen
-            picocom
-            srecord
-            gtkwave
-            openfpgaloader
-            openocd
-          ])
-          ++ (with lr_pkgs; [
-            uf2conv
-            # For legacy software
-            lowrisc-toolchain-gcc-rv32imcb
-          ])
-          ++ (with sonata-simulator; buildInputs ++ nativeBuildInputs);
+        packages = sonata-deps;
       };
-      packages = {inherit sonata-simulator sonata-documentation;};
+      packages = {
+        inherit sonata-simulator sonata-documentation;
+        dockerImage = pkgs.dockerTools.buildImage {
+          name = "devcontainer";
+          tag = "latest";
+          copyToRoot = pkgs.buildEnv {
+            name = "sonata-deps";
+            paths = sonata-deps ++ (with pkgs; [
+              busybox
+            ]);
+          };
+          config = {
+            Cmd = [ "${pkgs.runtimeShell}" ];
+          };
+        };
+      };
     };
   in
     flake-utils.lib.eachDefaultSystem system_outputs;
